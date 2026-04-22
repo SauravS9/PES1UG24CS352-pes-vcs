@@ -81,7 +81,7 @@ int head_update(const ObjectID *new_commit) {
     return rename(tmp,tp);
 }
 
-/* Phase 4 step 3: populate Commit struct with author, timestamp, parent */
+/* Phase 4 step 4: serialize commit and write to object store */
 int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID tree_id;
     if(tree_from_index(&tree_id)<0){
@@ -95,6 +95,11 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID parent_id;
     if(head_read(&parent_id)==0){commit.parent=parent_id;commit.has_parent=1;}
     else commit.has_parent=0;
-    (void)commit_id_out;
-    return -1; /* serialization not yet done */
+    void *data; size_t len;
+    if(commit_serialize(&commit,&data,&len)<0) return -1;
+    ObjectID commit_id;
+    int ret=object_write(OBJ_COMMIT,data,len,&commit_id);
+    free(data); if(ret<0) return -1;
+    if(commit_id_out) *commit_id_out=commit_id;
+    return -1; /* HEAD not yet updated */
 }
