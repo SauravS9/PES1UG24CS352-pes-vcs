@@ -52,8 +52,6 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
     }
     *data_out=buf; *len_out=off; return 0;
 }
-
-/* Phase 2 step 3: handle subdirectories recursively */
 static int write_tree_recursive(IndexEntry **entries, int count, int prefix_len, ObjectID *id_out) {
     Tree tree; tree.count = 0;
     int i = 0;
@@ -89,6 +87,14 @@ static int write_tree_recursive(IndexEntry **entries, int count, int prefix_len,
     int ret = object_write(OBJ_TREE, data, len, id_out);
     free(data); return ret;
 }
-int tree_from_index(ObjectID *id_out) { (void)id_out; return -1; }
+
+/* Phase 2 step 4: complete tree_from_index loading index entries */
+int tree_from_index(ObjectID *id_out) {
+    Index index;
+    if (index_load(&index) < 0) return -1;
+    IndexEntry *ptrs[MAX_INDEX_ENTRIES];
+    for (int i = 0; i < index.count; i++) ptrs[i] = &index.entries[i];
+    return write_tree_recursive(ptrs, index.count, 0, id_out);
+}
 
 __attribute__((weak)) int index_load(Index *index) { (void)index; return -1; }
