@@ -38,7 +38,7 @@ int object_exists(const ObjectID *id) {
     return access(path, F_OK) == 0;
 }
 
-/* Phase 1 step 2: add deduplication and shard directory creation */
+/* Phase 1 step 3: complete object_write with atomic temp-file rename */
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     const char *ts = (type==OBJ_BLOB)?"blob":(type==OBJ_TREE)?"tree":"commit";
     char header[64];
@@ -52,8 +52,17 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     char hex[HASH_HEX_SIZE+1]; hash_to_hex(&id, hex);
     char shard[512]; snprintf(shard, sizeof(shard), "%s/%.2s", OBJECTS_DIR, hex);
     mkdir(shard, 0755);
-    free(full);
-    return -1; /* atomic write not yet implemented */
+    char final_path[512]; object_path(&id, final_path, sizeof(final_path));
+    char tmp[512]; snprintf(tmp, sizeof(tmp), "%s.tmp", final_path);
+    int fd = open(tmp, O_CREAT|O_WRONLY|O_TRUNC, 0644);
+    if (fd < 0) { free(full); return -1; }
+    if (write(fd, full, full_len) != (ssize_t)full_len) { close(fd); free(full); return -1; }
+    fsync(fd); close(fd); free(full);
+    if (rename(tmp, final_path) < 0) return -1;
+    int dfd = open(shard, O_RDONLY);
+    if (dfd >= 0) { fsync(dfd); close(dfd); }
+    if (id_out) *id_out = id;
+    return 0;
 }
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
     (void)id; (void)type_out; (void)data_out; (void)len_out; return -1;
