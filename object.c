@@ -38,7 +38,7 @@ int object_exists(const ObjectID *id) {
     return access(path, F_OK) == 0;
 }
 
-/* Phase 1 step 1: build object header and compute SHA-256 hash */
+/* Phase 1 step 2: add deduplication and shard directory creation */
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     const char *ts = (type==OBJ_BLOB)?"blob":(type==OBJ_TREE)?"tree":"commit";
     char header[64];
@@ -48,9 +48,12 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     if (!full) return -1;
     memcpy(full, header, hl); full[hl] = '\0'; memcpy(full+hl+1, data, len);
     ObjectID id; compute_hash(full, full_len, &id);
-    if (id_out) *id_out = id;
+    if (object_exists(&id)) { if (id_out) *id_out = id; free(full); return 0; }
+    char hex[HASH_HEX_SIZE+1]; hash_to_hex(&id, hex);
+    char shard[512]; snprintf(shard, sizeof(shard), "%s/%.2s", OBJECTS_DIR, hex);
+    mkdir(shard, 0755);
     free(full);
-    return -1; /* write to disk not yet implemented */
+    return -1; /* atomic write not yet implemented */
 }
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
     (void)id; (void)type_out; (void)data_out; (void)len_out; return -1;
