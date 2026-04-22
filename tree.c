@@ -53,19 +53,36 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
     *data_out=buf; *len_out=off; return 0;
 }
 
-/* Phase 2 step 2: recursive helper handles flat file entries */
+/* Phase 2 step 3: handle subdirectories recursively */
 static int write_tree_recursive(IndexEntry **entries, int count, int prefix_len, ObjectID *id_out) {
     Tree tree; tree.count = 0;
     int i = 0;
     while (i < count) {
         const char *path = entries[i]->path + prefix_len;
-        /* flat files only for now */
-        TreeEntry *te = &tree.entries[tree.count++];
-        te->mode = entries[i]->mode;
-        te->hash = entries[i]->hash;
-        strncpy(te->name, path, sizeof(te->name)-1);
-        te->name[sizeof(te->name)-1] = '\0';
-        i++;
+        const char *slash = strchr(path, '/');
+        if (!slash) {
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = entries[i]->mode; te->hash = entries[i]->hash;
+            strncpy(te->name, path, sizeof(te->name)-1);
+            te->name[sizeof(te->name)-1] = '\0';
+            i++;
+        } else {
+            int dnl = (int)(slash - path);
+            char dir[256]; strncpy(dir, path, dnl); dir[dnl] = '\0';
+            int j = i;
+            while (j < count) {
+                const char *p = entries[j]->path + prefix_len;
+                if (strncmp(p, dir, dnl) != 0 || p[dnl] != '/') break;
+                j++;
+            }
+            ObjectID sub;
+            if (write_tree_recursive(entries+i, j-i, prefix_len+dnl+1, &sub) < 0) return -1;
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = MODE_DIR; te->hash = sub;
+            strncpy(te->name, dir, sizeof(te->name)-1);
+            te->name[sizeof(te->name)-1] = '\0';
+            i = j;
+        }
     }
     void *data; size_t len;
     if (tree_serialize(&tree, &data, &len) < 0) return -1;
