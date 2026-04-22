@@ -57,14 +57,14 @@ int index_load(Index *index) {
     }
     fclose(f); return 0;
 }
-static int cmp_idx(const void *a, const void *b) {
-    return strcmp(((const IndexEntry*)a)->path,((const IndexEntry*)b)->path);
+static int cmp_ptrs(const void *a, const void *b) {
+    return strcmp((*(const IndexEntry**)a)->path,(*(const IndexEntry**)b)->path);
 }
-/* Phase 3 step 3: implement index_save with atomic write */
+/* Phase 3 step 4: fix index_save to use pointer array, avoiding 5MB stack copy */
 int index_save(const Index *index) {
     const IndexEntry *ptrs[MAX_INDEX_ENTRIES];
     for(int i=0;i<index->count;i++) ptrs[i]=&index->entries[i];
-    qsort((void*)ptrs,index->count,sizeof(IndexEntry*),(int(*)(const void*,const void*))cmp_idx);
+    qsort(ptrs,index->count,sizeof(IndexEntry*),cmp_ptrs);
     char tmp[512]; snprintf(tmp,sizeof(tmp),"%s.tmp",INDEX_FILE);
     FILE *f=fopen(tmp,"w"); if(!f) return -1;
     for(int i=0;i<index->count;i++){
