@@ -37,8 +37,6 @@ int object_exists(const ObjectID *id) {
     char path[512]; object_path(id, path, sizeof(path));
     return access(path, F_OK) == 0;
 }
-
-/* Phase 1 step 3: complete object_write with atomic temp-file rename */
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     const char *ts = (type==OBJ_BLOB)?"blob":(type==OBJ_TREE)?"tree":"commit";
     char header[64];
@@ -64,6 +62,23 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     if (id_out) *id_out = id;
     return 0;
 }
+
+/* Phase 1 step 4: implement object_read with file reading and header parsing */
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    (void)id; (void)type_out; (void)data_out; (void)len_out; return -1;
+    char path[512]; object_path(id, path, sizeof(path));
+    FILE *f = fopen(path, "rb"); if (!f) return -1;
+    fseek(f, 0, SEEK_END); long fsz = ftell(f); fseek(f, 0, SEEK_SET);
+    uint8_t *buf = malloc(fsz); if (!buf) { fclose(f); return -1; }
+    if ((long)fread(buf, 1, fsz, f) != fsz) { free(buf); fclose(f); return -1; }
+    fclose(f);
+    uint8_t *np = memchr(buf, '\0', fsz); if (!np) { free(buf); return -1; }
+    if      (strncmp((char*)buf,"blob ",5)==0)   *type_out = OBJ_BLOB;
+    else if (strncmp((char*)buf,"tree ",5)==0)   *type_out = OBJ_TREE;
+    else if (strncmp((char*)buf,"commit ",7)==0) *type_out = OBJ_COMMIT;
+    else { free(buf); return -1; }
+    size_t off = (size_t)(np+1-buf), dlen = (size_t)fsz - off;
+    void *out = malloc(dlen); if (!out) { free(buf); return -1; }
+    memcpy(out, np+1, dlen);
+    *data_out = out; *len_out = dlen; free(buf);
+    return 0; /* integrity check not yet added */
 }
