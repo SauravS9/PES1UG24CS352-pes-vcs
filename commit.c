@@ -81,12 +81,20 @@ int head_update(const ObjectID *new_commit) {
     return rename(tmp,tp);
 }
 
-/* Phase 4 step 2: build tree from index */
+/* Phase 4 step 3: populate Commit struct with author, timestamp, parent */
 int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID tree_id;
     if(tree_from_index(&tree_id)<0){
         fprintf(stderr,"error: failed to build tree from index\n"); return -1;
     }
-    (void)message; (void)commit_id_out;
-    return -1; /* commit object not yet created */
+    Commit commit; memset(&commit,0,sizeof(commit));
+    commit.tree=tree_id;
+    commit.timestamp=(uint64_t)time(NULL);
+    snprintf(commit.author,sizeof(commit.author),"%s",pes_author());
+    snprintf(commit.message,sizeof(commit.message),"%s",message);
+    ObjectID parent_id;
+    if(head_read(&parent_id)==0){commit.parent=parent_id;commit.has_parent=1;}
+    else commit.has_parent=0;
+    (void)commit_id_out;
+    return -1; /* serialization not yet done */
 }
