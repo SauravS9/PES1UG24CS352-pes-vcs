@@ -10,6 +10,8 @@
 #define MODE_EXEC 0100755
 #define MODE_DIR  0040000
 
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
 uint32_t get_file_mode(const char *path) {
     struct stat st;
     if (lstat(path, &st) != 0) return 0;
@@ -51,5 +53,25 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
     *data_out=buf; *len_out=off; return 0;
 }
 
-/* Phase 2: tree_from_index stub */
+/* Phase 2 step 2: recursive helper handles flat file entries */
+static int write_tree_recursive(IndexEntry **entries, int count, int prefix_len, ObjectID *id_out) {
+    Tree tree; tree.count = 0;
+    int i = 0;
+    while (i < count) {
+        const char *path = entries[i]->path + prefix_len;
+        /* flat files only for now */
+        TreeEntry *te = &tree.entries[tree.count++];
+        te->mode = entries[i]->mode;
+        te->hash = entries[i]->hash;
+        strncpy(te->name, path, sizeof(te->name)-1);
+        te->name[sizeof(te->name)-1] = '\0';
+        i++;
+    }
+    void *data; size_t len;
+    if (tree_serialize(&tree, &data, &len) < 0) return -1;
+    int ret = object_write(OBJ_TREE, data, len, id_out);
+    free(data); return ret;
+}
 int tree_from_index(ObjectID *id_out) { (void)id_out; return -1; }
+
+__attribute__((weak)) int index_load(Index *index) { (void)index; return -1; }
