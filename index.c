@@ -44,7 +44,6 @@ int index_status(const Index *index) {
     }
     if(!nc) printf("  (nothing to show)\n"); printf("\n"); return 0;
 }
-/* Phase 3 step 2: implement index_load */
 int index_load(Index *index) {
     index->count = 0;
     FILE *f = fopen(INDEX_FILE,"r"); if(!f) return 0;
@@ -58,5 +57,21 @@ int index_load(Index *index) {
     }
     fclose(f); return 0;
 }
-int index_save(const Index *index) { (void)index; return -1; }
+static int cmp_idx(const void *a, const void *b) {
+    return strcmp(((const IndexEntry*)a)->path,((const IndexEntry*)b)->path);
+}
+/* Phase 3 step 3: implement index_save with atomic write */
+int index_save(const Index *index) {
+    const IndexEntry *ptrs[MAX_INDEX_ENTRIES];
+    for(int i=0;i<index->count;i++) ptrs[i]=&index->entries[i];
+    qsort((void*)ptrs,index->count,sizeof(IndexEntry*),(int(*)(const void*,const void*))cmp_idx);
+    char tmp[512]; snprintf(tmp,sizeof(tmp),"%s.tmp",INDEX_FILE);
+    FILE *f=fopen(tmp,"w"); if(!f) return -1;
+    for(int i=0;i<index->count;i++){
+        char hex[HASH_HEX_SIZE+1]; hash_to_hex(&ptrs[i]->hash,hex);
+        fprintf(f,"%o %s %llu %u %s\n",ptrs[i]->mode,hex,(unsigned long long)ptrs[i]->mtime_sec,ptrs[i]->size,ptrs[i]->path);
+    }
+    fflush(f); fsync(fileno(f)); fclose(f);
+    return rename(tmp,INDEX_FILE);
+}
 int index_add(Index *index, const char *path) { (void)index;(void)path; return -1; }
