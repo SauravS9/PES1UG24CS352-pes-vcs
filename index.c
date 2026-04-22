@@ -60,7 +60,6 @@ int index_load(Index *index) {
 static int cmp_ptrs(const void *a, const void *b) {
     return strcmp((*(const IndexEntry**)a)->path,(*(const IndexEntry**)b)->path);
 }
-/* Phase 3 step 4: fix index_save to use pointer array, avoiding 5MB stack copy */
 int index_save(const Index *index) {
     const IndexEntry *ptrs[MAX_INDEX_ENTRIES];
     for(int i=0;i<index->count;i++) ptrs[i]=&index->entries[i];
@@ -74,4 +73,20 @@ int index_save(const Index *index) {
     fflush(f); fsync(fileno(f)); fclose(f);
     return rename(tmp,INDEX_FILE);
 }
-int index_add(Index *index, const char *path) { (void)index;(void)path; return -1; }
+/* Phase 3 step 5: implement index_add to stage files as blobs */
+int index_add(Index *index, const char *path) {
+    FILE *f=fopen(path,"rb"); if(!f){perror(path);return -1;}
+    fseek(f,0,SEEK_END); long sz=ftell(f); fseek(f,0,SEEK_SET);
+    void *data=malloc(sz>0?sz:1); if(!data){fclose(f);return -1;}
+    fread(data,1,sz,f); fclose(f);
+    ObjectID id;
+    if(object_write(OBJ_BLOB,data,sz,&id)<0){free(data);return -1;}
+    free(data);
+    struct stat st; if(stat(path,&st)<0) return -1;
+    IndexEntry *e=index_find(index,path);
+    if(!e){if(index->count>=MAX_INDEX_ENTRIES)return -1; e=&index->entries[index->count++];}
+    e->mode=(st.st_mode&S_IXUSR)?0100755:0100644;
+    e->hash=id; e->mtime_sec=(uint64_t)st.st_mtime; e->size=(uint32_t)st.st_size;
+    strncpy(e->path,path,sizeof(e->path)-1); e->path[sizeof(e->path)-1]='\0';
+    return index_save(index);
+}
