@@ -81,7 +81,7 @@ int head_update(const ObjectID *new_commit) {
     return rename(tmp,tp);
 }
 
-/* Phase 4 step 4: serialize commit and write to object store */
+/* Phase 4 step 5: update HEAD and print confirmation */
 int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID tree_id;
     if(tree_from_index(&tree_id)<0){
@@ -100,6 +100,9 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID commit_id;
     int ret=object_write(OBJ_COMMIT,data,len,&commit_id);
     free(data); if(ret<0) return -1;
+    if(head_update(&commit_id)<0) return -1;
     if(commit_id_out) *commit_id_out=commit_id;
-    return -1; /* HEAD not yet updated */
+    char hex[HASH_HEX_SIZE+1]; hash_to_hex(&commit_id,hex);
+    printf("[main %.7s] %s\n",hex,message);
+    return 0;
 }
