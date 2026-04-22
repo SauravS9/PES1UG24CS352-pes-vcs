@@ -81,7 +81,12 @@ int head_update(const ObjectID *new_commit) {
     return rename(tmp,tp);
 }
 
-/* Phase 4 step 1: commit_create stub */
+/* Phase 4 step 2: build tree from index */
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    (void)message; (void)commit_id_out; return -1;
+    ObjectID tree_id;
+    if(tree_from_index(&tree_id)<0){
+        fprintf(stderr,"error: failed to build tree from index\n"); return -1;
+    }
+    (void)message; (void)commit_id_out;
+    return -1; /* commit object not yet created */
 }
